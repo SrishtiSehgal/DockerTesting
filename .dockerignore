@@ -1,0 +1,7 @@
+*.md
+.vscode
+.git
+.gitignore
+__pycache__
+*.txt
+!requirements.txt
