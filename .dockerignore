@@ -5,3 +5,5 @@
 __pycache__
 *.txt
 !requirements.txt
+entry_in
+entry_out
