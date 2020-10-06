@@ -1,0 +1,127 @@
+docker run --volumes-from r1 -it ubuntu ls /data
+
+Data Volumes mapped to the host are great for persisting data. However, to gain access to them from 
+another container you need to know the exact path which can make it error-prone.
+
+An alternate approach is to use -volumes-from. The parameter maps the mapped volumes from the source 
+container to the container being launched.
+
+In this case, we're mapping our Redis container's volume to an Ubuntu container. The /data directory 
+only exists within our Redis container, however, because of -volumes-from our Ubuntu container can access the data.
+
+docker run --volumes-from r1 -it ubuntu ls /data
+
+This allows us to access volumes from other containers without having to be concerned how they're persisted on the host.
+
+Mounting Volumes gives the container full read and write access to the directory. 
+You can specify read-only permissions on the directory by adding the permissions :ro to the mount.
+
+If the container attempts to modify data within the directory it will error.
+
+docker run -v /docker/redis-data:/data:ro -it ubuntu rm -rf /data
+
+it is interactive mode
+rm -rf removes the container after it's done
+
+
+
+Data Containers are containers whose sole responsibility is to be a place to store/manage data.
+
+Like other containers they are managed by the host system. However, they don't run when you perform a docker ps command.
+
+To create a Data Container we first create a container with a well-known name for future reference. We use busybox as the base as it's small and lightweight in case we want to explore and move the container to another host.
+
+When creating the container, we also provide a -v option to define where other containers will be reading/saving data.
+
+Task
+Create a Data Container for storing configuration files using docker create -v /config --name dataContainer busybox
+
+With the container in place, we can now copy files from our local client directory into the container.
+
+To copy files into a container you use the command docker cp. The following command will copy the config.conf file into our dataContainer and the directory config.
+
+docker cp config.conf dataContainer:/config/
+
+Now our Data Container has our config, we can reference the container when we launch dependent containers requiring the configuration file.
+
+Using the --volumes-from <container> option we can use the mount volumes from other containers inside the container being launched. In this case, we'll launch an Ubuntu container which has reference to our Data Container. When we list the config directory, it will show the files from the attached container.
+
+docker run --volumes-from dataContainer ubuntu ls /config
+
+If a /config directory already existed then, the volumes-from would override and be the directory used. You can map multiple volumes to a container.
+
+If we wanted to move the Data Container to another machine then we can export it to a .tar file.
+
+docker export dataContainer > dataContainer.tar
+
+The command docker import dataContainer.tar will import the Data Container back into Docker
+
+
+
+When you start a container, Docker will track the Standard Out and Standard Error outputs from the process and make them available via the client.
+
+Example
+In the background, there is an instance of Redis running with the name redis-server. Using the Docker client, we can access the standard out and standard error outputs using docker logs redis-server
+
+By default, the Docker logs are outputting using the json-file logger meaning the output stored in a JSON file on the host. This can result in large files filling the disk. As a result, you can change the log driver to move to a different destination.
+
+Syslog
+The Syslog log driver will write all the container logs to the central syslog on the host. "syslog is a widely used standard for message logging. It permits separation of the software that generates messages, the system that stores them, and the software that reports and analyses them." Wikipedia
+
+This log-driver is designed to be used when syslog is being collected and aggregated by an external system.
+
+Example
+The command below will redirect the redis logs to syslog.
+
+docker run -d --name redis-syslog --log-driver=syslog redis
+
+Accessing Logs
+If you attempted to view the logs using the client you'll recieve the error FATA[0000] "logs" command is supported only for "json-file" logging driver
+
+Instead, you need to access them via the syslog stream.
+
+The third option is to disable logging on the container. This is particularly useful for containers which are very verbose in their logging.
+
+Example
+When the container is launched simply set the log-driver to none. No output will be logged.
+
+docker run -d --name redis-none --log-driver=none redis
+
+Which Config?
+The inspect command allows you to identify the logging configuration for a particular container. The command below will output the LogConfig section for each of the containers.
+
+Server created in step 1
+
+docker inspect --format '{{ .HostConfig.LogConfig }}' redis-server
+
+Server created in step 2
+
+docker inspect --format '{{ .HostConfig.LogConfig }}' redis-syslog
+
+Server created in this step
+
+docker inspect --format '{{ .HostConfig.LogConfig }}' redis-none
+
+
+
+
+
+https://stackoverflow.com/questions/41520614/docker-tag-vs-name-clarification
+I think you mixed two concepts here, which causes the confusion. On the one hand there is a Docker image which you can think of as a blueprint for starting a container. On the other hand there are containers which are running instances that are based on an image.
+
+When you docker build -t tagname . you are creating an image and tag it with a "name:tag" format usually. So for example, you are building your image as
+
+docker build -t myimage:1.0 .
+which creates a new image that is named myimage with a version of 1.0. This is what you will see when you run docker images.
+
+The --name parameter is then used when you create and start a new container based of your image. So for example, you run a new container using the following command:
+
+docker run -it --name mycontainerinstance myimage
+This creates a new container based of your image myimage. This container instance is named mycontainerinstance. You can see this when you run docker ps -a which will list the container with its container name mycontainerinstance.
+
+So to better understand the difference, have a look at the docs for building an image and running a container, specifying an image. When reading the docs you will notice which commands target an image and which commands are for containers. You will also see, that there are commands that work for images and containers like docker inspect does.
+
+Inspecting for a network address of course only works when you provide a container name, not an image. In your special case, the container got a generated name, which you can see by running docker ps -a. When you provide this name to the docker inspect command, you will likely see the ip address you wanted.
+
+
+
